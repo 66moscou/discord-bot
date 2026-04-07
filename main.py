@@ -98,7 +98,7 @@ async def atualizar_status():
     total_servidores = len(bot.guilds)
 
     status = discord.Game(
-        name=f"developed by 💢 66moscou | Membros {total_servidores} /{total_membros}"
+        name=f"💢 by 66moscou | Membros {total_servidores} /{total_membros}"
     )
 
     await bot.change_presence(
