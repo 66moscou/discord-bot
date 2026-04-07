@@ -88,16 +88,37 @@ class PainelVerificacao(discord.ui.View):
         )
 
 
+# ============== LOOP DE STATUS ==============
+
+from discord.ext import tasks
+
+@tasks.loop(seconds=15)
+async def atualizar_status():
+    total_membros = sum(guild.member_count for guild in bot.guilds)
+    total_servidores = len(bot.guilds)
+
+    status = discord.Game(
+        name=f"💙 xLucazzz Store | Cluster {total_servidores} [{total_membros}]"
+    )
+
+    await bot.change_presence(
+        status=discord.Status.online,
+        activity=status
+    )
+
 # ================= ON_READY =================
 
 @bot.event
 async def on_ready():
-    bot.add_view(ViewCallBooster())
-    bot.add_view(ViewSetagem())
-    bot.add_view(PainelVerificacao())
 
-    synced = await bot.tree.sync()
-    print(f"Sincronizados {len(synced)} comandos")
+    # 👇 REGISTRA TODAS AS VIEWS PERSISTENTES
+    bot.add_view(PainelVerificacao())
+    bot.add_view(ViewSetagem())
+    bot.add_view(ViewCallBooster())
+    
+    # 👇 INICIA O STATUS DINÂMICO
+    if not atualizar_status.is_running():
+        atualizar_status.start()
 
     print(f"✅ Bot online como {bot.user}")
 
@@ -150,6 +171,9 @@ async def painel(interaction: discord.Interaction):
         )
         return
 
+    # 👇 evita erro de interação
+    await interaction.response.defer(ephemeral=True)
+
     embed = discord.Embed(
         title="🔐 Verificação",
         description="Clique no botão abaixo para se verificar.",
@@ -163,7 +187,7 @@ async def painel(interaction: discord.Interaction):
 
     salvar_painel(msg.id, interaction.channel.id)
 
-    await interaction.response.send_message(
+    await interaction.followup.send(
         "✅ Painel criado com sucesso!",
         ephemeral=True
     )
@@ -551,51 +575,15 @@ class SelectCargos(discord.ui.Select):
     def __init__(self):
 
         options = [
-            discord.SelectOption(
-                label="Once Human",
-                description="Receber Cargo Once Human",
-                value=str(CARGO_SET1)
-            ),
-            discord.SelectOption(
-                label="Cod - MWIII",
-                description="Receber Cargo Cod - MWIII",
-                value=str(CARGO_SET2)
-            ),
-            discord.SelectOption(
-                label="The Forest",
-                description="Receber Cargo The Forest",
-                value=str(CARGO_SET3)
-            ),
-            discord.SelectOption(
-                label="FiveM",
-                description="Receber Cargo FiveM",
-                value=str(CARGO_SET4)
-            ),
-            discord.SelectOption(
-                label="Crossfire",
-                description="Receber Cargo Crossfire",
-                value=str(CARGO_SET5)
-            ),
-            discord.SelectOption(
-                label="BloodStike",
-                description="Receber Cargo BloodStrike",
-                value=str(CARGO_SET6)
-            ),
-            discord.SelectOption(
-                label="The Minecraft",
-                description="Receber Cargo Minecraft",
-                value=str(CARGO_SET7)
-            ),
-            discord.SelectOption(
-                label="Fortite",
-                description="Receber Cargo Fortnite",
-                value=str(CARGO_SET8)
-            ),
-            discord.SelectOption(
-                label="Valorant",
-                description="Receber Cargo Valorant",
-                value=str(CARGO_SET9)
-            )
+            discord.SelectOption(label="Once Human", value=str(CARGO_SET1)),
+            discord.SelectOption(label="Cod - MWIII", value=str(CARGO_SET2)),
+            discord.SelectOption(label="The Forest", value=str(CARGO_SET3)),
+            discord.SelectOption(label="FiveM", value=str(CARGO_SET4)),
+            discord.SelectOption(label="Crossfire", value=str(CARGO_SET5)),
+            discord.SelectOption(label="BloodStrike", value=str(CARGO_SET6)),
+            discord.SelectOption(label="Minecraft", value=str(CARGO_SET7)),
+            discord.SelectOption(label="Fortnite", value=str(CARGO_SET8)),
+            discord.SelectOption(label="Valorant", value=str(CARGO_SET9)),
         ]
 
         super().__init__(
@@ -609,16 +597,22 @@ class SelectCargos(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction):
 
         membro = interaction.user
+        adicionados = 0
 
         for cargo_id in self.values:
 
             cargo = interaction.guild.get_role(int(cargo_id))
 
+            # 👇 evita erro se cargo não existir
+            if cargo is None:
+                continue
+
             if cargo not in membro.roles:
                 await membro.add_roles(cargo)
+                adicionados += 1
 
         await interaction.response.send_message(
-            "✅ Seus cargos foram atualizados!",
+            f"✅ {adicionados} cargos adicionados!",
             ephemeral=True
         )
 
