@@ -27,6 +27,11 @@ CARGO_SET7 = 1307721831947571281
 CARGO_SET8 = 1244488869769121832
 CARGO_SET9 = 1441219402883399833
 
+CARGO_ATENDIMENTO = 1255721912588304516
+
+CATEGORIA_TICKET_SUPORTE = 1491973977919193189
+CATEGORIA_TICKET_COMPRA = 1491974004964196352
+CATEGORIA_TICKET_DUVIDAS = 1491974034991087750
 
 # ===== INTENTS =====
 intents = discord.Intents.default()
@@ -121,6 +126,13 @@ async def on_ready():
     bot.add_view(ViewCallBooster())
     bot.add_view(ViewTicket())
     bot.add_view(ViewStaffTicket())
+
+    # 🔥 ESSA LINHA É O QUE FALTA
+    try:
+        synced = await bot.tree.sync()
+        print(f"🔄 {len(synced)} comandos sincronizados!")
+    except Exception as e:
+        print(e)
     
     # 👇 INICIA O STATUS DINÂMICO
     if not atualizar_status.is_running():
@@ -644,9 +656,25 @@ async def criar_ticket(interaction, nome, categoria_id):
         )
         return
 
+    # 👇 COLOCA AQUI
     staff_role = guild.get_role(CARGO_ATENDIMENTO)
     categoria = guild.get_channel(categoria_id)
 
+    if staff_role is None:
+        await interaction.response.send_message(
+            "❌ Cargo de atendimento não encontrado.",
+            ephemeral=True
+        )
+        return
+
+    if categoria is None:
+        await interaction.response.send_message(
+            "❌ Categoria não encontrada.",
+            ephemeral=True
+        )
+        return
+
+    # 👇 resto do código continua
     overwrites = {
         guild.default_role: discord.PermissionOverwrite(view_channel=False),
         user: discord.PermissionOverwrite(view_channel=True, send_messages=True),
@@ -654,7 +682,7 @@ async def criar_ticket(interaction, nome, categoria_id):
     }
 
     canal = await guild.create_text_channel(
-        name=f"{nome}-{user.name}",
+        name=f"{nome}-{user.name}".replace(" ", "-").lower(),
         category=categoria,
         overwrites=overwrites
     )
@@ -679,15 +707,15 @@ class ViewTicket(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="Suporte", emoji="🛠️", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="Suporte", emoji="🛠️", style=discord.ButtonStyle.primary, custom_id="ticket_suporte")
     async def suporte(self, interaction: discord.Interaction, button: discord.ui.Button):
         await criar_ticket(interaction, "suporte", CATEGORIA_TICKET_SUPORTE)
 
-    @discord.ui.button(label="Compra", emoji="💰", style=discord.ButtonStyle.success)
+    @discord.ui.button(label="Compra", emoji="💰", style=discord.ButtonStyle.success, custom_id="ticket_compra")
     async def compra(self, interaction: discord.Interaction, button: discord.ui.Button):
         await criar_ticket(interaction, "compra", CATEGORIA_TICKET_COMPRA)
 
-    @discord.ui.button(label="Dúvidas", emoji="❓", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Dúvidas", emoji="❓", style=discord.ButtonStyle.secondary, custom_id="ticket_duvidas")
     async def duvidas(self, interaction: discord.Interaction, button: discord.ui.Button):
         await criar_ticket(interaction, "duvidas", CATEGORIA_TICKET_DUVIDAS)
 
@@ -697,13 +725,13 @@ class ViewStaffTicket(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="Assumir", style=discord.ButtonStyle.green)
+    @discord.ui.button(label="Assumir", style=discord.ButtonStyle.green, custom_id="staff_assumir")
     async def assumir(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_message(
             f"👤 Ticket assumido por {interaction.user.mention}"
         )
 
-    @discord.ui.button(label="Renomear", style=discord.ButtonStyle.primary)
+    @discord.ui.button(label="Renomear", style=discord.ButtonStyle.primary, custom_id="staff_renomear")
     async def renomear(self, interaction: discord.Interaction, button: discord.ui.Button):
 
         class ModalRenomear(discord.ui.Modal, title="Renomear Ticket"):
@@ -715,39 +743,46 @@ class ViewStaffTicket(discord.ui.View):
 
         await interaction.response.send_modal(ModalRenomear())
 
-    @discord.ui.button(label="Finalizar", style=discord.ButtonStyle.red)
-async def finalizar(self, interaction: discord.Interaction, button: discord.ui.Button):
+    @discord.ui.button(label="Finalizar", style=discord.ButtonStyle.red, custom_id="staff_finalizar")
+    async def finalizar(self, interaction: discord.Interaction, button: discord.ui.Button):
 
-    channel = interaction.channel
+        channel = interaction.channel
 
-    mensagens = []
-    async for msg in channel.history(limit=None, oldest_first=True):
-        data = msg.created_at.strftime("%d/%m/%Y %H:%M")
-        mensagens.append(f"[{data}] {msg.author}: {msg.content}")
+        mensagens = []
+        async for msg in channel.history(limit=None, oldest_first=True):
+            data = msg.created_at.strftime("%d/%m/%Y %H:%M")
 
-    transcript = "\n".join(mensagens)
+            conteudo = msg.content if msg.content else "[sem texto]"
 
-    arquivo = discord.File(
-        io.StringIO(transcript),
-        filename=f"transcript-{channel.name}.txt"
-    )
+            if msg.attachments:
+                conteudo += " [anexo]"
+            if msg.embeds:
+                conteudo += " [embed]"
 
-    try:
-        await interaction.user.send(
-            f"📄 Transcript do ticket {channel.name}",
-            file=arquivo
+            mensagens.append(f"[{data}] {msg.author}: {conteudo}")
+
+        transcript = "\n".join(mensagens)
+
+        arquivo = discord.File(
+            io.StringIO(transcript),
+            filename=f"transcript-{channel.name}.txt"
         )
-    except:
-        pass
 
-    # 🔓 LIBERA O USUÁRIO PARA ABRIR NOVO TICKET
-    for user_id, canal in list(tickets_abertos.items()):
-        if canal.id == channel.id:
-            del tickets_abertos[user_id]
-            break
+        try:
+            await interaction.user.send(
+                f"📄 Transcript do ticket {channel.name}",
+                file=arquivo
+            )
+        except:
+            pass
 
-    await interaction.response.send_message("🔒 Fechando ticket...")
-    await channel.delete()
+        for user_id, canal in list(tickets_abertos.items()):
+            if canal.id == channel.id:
+                del tickets_abertos[user_id]
+                break
+
+        await interaction.response.send_message("🔒 Fechando ticket...")
+        await channel.delete()
 
 
 # ===== COMANDO /TICKET =====
@@ -764,7 +799,7 @@ async def ticket(interaction: discord.Interaction):
     await interaction.response.send_message(
         embed=embed,
         view=ViewTicket(),
-        ephemeral=True
+        ephemeral=False
     )
 
 
