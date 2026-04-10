@@ -681,17 +681,22 @@ async def criar_ticket(interaction, nome, categoria_id):
 
         user: discord.PermissionOverwrite(
             view_channel=True,
-            send_messages=True
+            send_messages=True,
+            read_message_history=True
         ),
 
         staff_role: discord.PermissionOverwrite(
             view_channel=True,
-            send_messages=True
+            send_messages=True,
+            read_message_history=True,
+            manage_channels=True
         ),
 
         guild.me: discord.PermissionOverwrite(
             view_channel=True,
-            send_messages=True
+            send_messages=True,
+            read_message_history=True,
+            manage_channels=True
         )
     }
 
