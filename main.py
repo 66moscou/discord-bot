@@ -1026,6 +1026,35 @@ async def admin(interaction: discord.Interaction):
         )
 
 
+# ============= RESET TICKET =============
+@bot.tree.command(name="resetarticket", description="Resetar ticket de um usuário")
+@app_commands.describe(usuario="Usuário que terá o ticket resetado")
+@app_commands.default_permissions(administrator=True)
+async def resetarticket(interaction: discord.Interaction, usuario: discord.Member):
+
+    if usuario.id not in tickets_abertos:
+        await interaction.response.send_message(
+            "❌ Esse usuário não possui ticket aberto.",
+            ephemeral=True
+        )
+        return
+
+    canal = tickets_abertos[usuario.id]
+
+    # remove do sistema
+    del tickets_abertos[usuario.id]
+
+    try:
+        await canal.delete()
+    except:
+        pass
+
+    await interaction.response.send_message(
+        f"✅ Ticket de {usuario.mention} foi resetado.",
+        ephemeral=True
+    )
+
+    
 # ================= START =================
 
 bot.run(TOKEN)
