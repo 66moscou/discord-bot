@@ -126,6 +126,7 @@ async def on_ready():
     bot.add_view(ViewCallBooster())
     bot.add_view(ViewTicket())
     bot.add_view(ViewStaffTicket())
+    bot.add_view(PainelAdmin())
 
     # 🔥 ESSA LINHA É O QUE FALTA
     try:
@@ -785,7 +786,7 @@ class ViewStaffTicket(discord.ui.View):
         await channel.delete()
 
 
-# ===== COMANDO /TICKET =====
+# ========= COMANDO /TICKET =========
 @bot.tree.command(name="ticket", description="Abrir painel de ticket")
 async def ticket(interaction: discord.Interaction):
 
@@ -795,12 +796,148 @@ async def ticket(interaction: discord.Interaction):
         color=discord.Color.blue()
     )
 
-    # 👇 resposta invisível (como você pediu)
+    # 👇 resposta visível (editado)
     await interaction.response.send_message(
         embed=embed,
         view=ViewTicket(),
         ephemeral=False
     )
+
+
+# ======== PAINEL ADMINISTRAÇÃO / CONFIG =======
+class PainelAdmin(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    async def check_admin(self, interaction):
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message(
+                "❌ Apenas administradores podem usar isso.",
+                ephemeral=True
+            )
+            return False
+        return True
+
+    @discord.ui.button(label="🧹 Limpar Chat", style=discord.ButtonStyle.secondary, custom_id="admin_clear")
+    async def clear(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+        if not await self.check_admin(interaction):
+            return
+
+        await interaction.channel.purge(limit=50)
+
+        await interaction.response.send_message(
+            "🧹 50 mensagens apagadas.",
+            ephemeral=True
+        )
+
+    @discord.ui.button(label="🔨 Banir", style=discord.ButtonStyle.danger, custom_id="admin_ban")
+    async def ban(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+        if not await self.check_admin(interaction):
+            return
+
+        class ModalBan(discord.ui.Modal, title="Banir usuário"):
+            user_id = discord.ui.TextInput(label="ID do usuário")
+            motivo = discord.ui.TextInput(label="Motivo", required=False)
+
+            async def on_submit(self2, interaction2: discord.Interaction):
+
+                membro = interaction2.guild.get_member(int(self2.user_id.value))
+
+                if not membro:
+                    await interaction2.response.send_message("❌ Usuário não encontrado.", ephemeral=True)
+                    return
+
+                await membro.ban(reason=self2.motivo.value or "Sem motivo")
+
+                await interaction2.response.send_message(
+                    f"🔨 {membro} foi banido.",
+                    ephemeral=True
+                )
+
+        await interaction.response.send_modal(ModalBan())
+
+    @discord.ui.button(label="🎫 Ticket", style=discord.ButtonStyle.primary, custom_id="admin_ticket")
+    async def ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+        if not await self.check_admin(interaction):
+            return
+
+        embed = discord.Embed(
+            title="🎫 Sistema de Tickets",
+            description="Escolha uma categoria abaixo:",
+            color=discord.Color.blue()
+        )
+
+        await interaction.channel.send(embed=embed, view=ViewTicket())
+
+        await interaction.response.send_message("✅ Painel de ticket enviado.", ephemeral=True)
+
+    @discord.ui.button(label="🔐 Verificação", style=discord.ButtonStyle.success, custom_id="admin_verificacao")
+    async def verificacao(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+        if not await self.check_admin(interaction):
+            return
+
+        embed = discord.Embed(
+            title="🔐 Verificação",
+            description="Clique no botão abaixo para se verificar.",
+            color=discord.Color.green()
+        )
+
+        await interaction.channel.send(embed=embed, view=PainelVerificacao())
+
+        await interaction.response.send_message("✅ Painel de verificação enviado.", ephemeral=True)
+
+
+@bot.tree.command(name="admin", description="Abrir painel administrativo")
+@app_commands.default_permissions(administrator=True)
+async def admin(interaction: discord.Interaction):
+
+    embed = discord.Embed(
+        title="⚙️ Painel Administrativo",
+        description=(
+            "Use os botões abaixo para gerenciar o servidor.\n\n"
+            "🧹 Limpeza rápida\n"
+            "🔨 Moderação\n"
+            "🎫 Sistema de tickets\n"
+            "🔐 Verificação"
+        ),
+        color=discord.Color.dark_theme()
+    )
+
+    embed.set_footer(text="Sistema administrativo moderno")
+
+    await interaction.response.send_message(
+        embed=embed,
+        view=PainelAdmin()
+    )
+    
+
+    # ========== ABRIR PAINEL ADM ==========
+    @bot.tree.command(name="admin", description="Abrir painel administrativo")
+    @app_commands.default_permissions(administrator=True)
+    async def admin(interaction: discord.Interaction):
+
+        embed = discord.Embed(
+            title="⚙️ Painel Administrativo",
+            description=(
+                "Use os botões abaixo para gerenciar o servidor.\n\n"
+                "🧹 Limpeza rápida\n"
+                "🔨 Moderação\n"
+                "🎫 Sistema de tickets\n"
+                "🔐 Verificação"
+            ),
+            color=discord.Color.dark_theme()
+        )
+
+        embed.set_footer(text="Sistema administrativo moderno")
+
+        await interaction.response.send_message(
+            embed=embed,
+            view=PainelAdmin()
+        )
 
 
 # ================= START =================
