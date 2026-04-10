@@ -721,7 +721,7 @@ async def criar_ticket(interaction, nome, categoria_id):
 
     msg = await canal.send(
         embed=embed,
-        view=ViewStaffTicket(msg.id)
+        view=ViewStaffTicket()
     )
 
     await interaction.response.send_message(
@@ -768,33 +768,17 @@ class ViewStaffTicket(discord.ui.View):
             )
             return
 
-        if self.assumido_por:
-            await interaction.response.send_message(
-                f"⚠ Já assumido por {self.assumido_por.mention}",
-                ephemeral=True
-            )
-            return
+        embed = interaction.message.embeds[0]
 
-        self.assumido_por = interaction.user
+        nova_desc = embed.description.replace(
+            "🟡 Aguardando atendimento",
+            f"🟢 Atendido por {interaction.user.mention}"
+        )
 
-        # 👇 PEGA A MENSAGEM ORIGINAL
-        try:
-            msg = await interaction.channel.fetch_message(self.message_id)
-            embed = msg.embeds[0]
+        embed.description = nova_desc
+        embed.color = discord.Color.green()
 
-            # 👇 ALTERA O TEXTO
-            nova_desc = embed.description.replace(
-                "🟡 Aguardando atendimento",
-                f"🟢 Atendido por {interaction.user.mention}"
-            )
-
-            embed.description = nova_desc
-            embed.color = discord.Color.green()
-
-            await msg.edit(embed=embed)
-
-        except Exception as e:
-            print("Erro ao editar embed:", e)
+        await interaction.message.edit(embed=embed)
 
         await interaction.response.send_message(
             f"👤 Ticket assumido por {interaction.user.mention}"
@@ -807,7 +791,6 @@ class ViewStaffTicket(discord.ui.View):
                 await interaction.channel.edit(name=self2.nome.value)
                 await interaction2.response.send_message("✅ Nome alterado.", ephemeral=True)
 
-        await interaction.response.send_modal(ModalRenomear())
 
     @discord.ui.button(label="Finalizar", emoji="🔒", style=discord.ButtonStyle.danger, custom_id="staff_finalizar")
     async def finalizar(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -1054,7 +1037,7 @@ async def resetarticket(interaction: discord.Interaction, usuario: discord.Membe
         ephemeral=True
     )
 
-    
+
 # ================= START =================
 
 bot.run(TOKEN)
