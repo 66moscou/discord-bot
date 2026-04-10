@@ -691,9 +691,23 @@ async def criar_ticket(interaction, nome, categoria_id):
     # ✅ SALVA QUE O USUÁRIO TEM TICKET ABERTO
     tickets_abertos[user.id] = canal
 
+    embed = discord.Embed(
+    title="🎫 Ticket aberto com sucesso",
+    description=(
+        f"👋 Olá {user.mention}\n\n"
+        f"📌 **Categoria:** {nome.capitalize()}\n"
+        f"📊 **Status:** 🟡 Aguardando atendimento\n\n"
+        f"{staff_role.mention} irá assumir este ticket em breve.\n\n"
+        f"💬 Descreva seu problema com detalhes."
+    ),
+    color=discord.Color.orange()
+    )
+
+    embed.set_thumbnail(url=user.display_avatar.url)
+    embed.set_footer(text=f"ID: {user.id}")
+
     await canal.send(
-        f"🎫 | Olá {user.mention}, bem-vindo ao **{nome}**!\n"
-        f"{staff_role.mention} irá te atender em breve.",
+        embed=embed,
         view=ViewStaffTicket()
     )
 
@@ -725,34 +739,73 @@ class ViewTicket(discord.ui.View):
 class ViewStaffTicket(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
+        self.assumido_por = None
 
-    @discord.ui.button(label="Assumir", style=discord.ButtonStyle.green, custom_id="staff_assumir")
+    def is_staff(self, interaction):
+        return any(role.id == CARGO_ATENDIMENTO for role in interaction.user.roles)
+
+    @discord.ui.button(label="Assumir", emoji="👤", style=discord.ButtonStyle.success, custom_id="staff_assumir")
     async def assumir(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message(
-            f"👤 Ticket assumido por {interaction.user.mention}"
+
+        if not self.is_staff(interaction):
+            await interaction.response.send_message(
+                "❌ Apenas staff pode usar isso.",
+                ephemeral=True
+            )
+            return
+
+        if self.assumido_por:
+            await interaction.response.send_message(
+                f"⚠ Já assumido por {self.assumido_por.mention}",
+                ephemeral=True
+            )
+            return
+
+        self.assumido_por = interaction.user
+
+        embed = discord.Embed(
+            description=f"👤 Ticket assumido por {interaction.user.mention}",
+            color=discord.Color.green()
         )
 
-    @discord.ui.button(label="Renomear", style=discord.ButtonStyle.primary, custom_id="staff_renomear")
+        await interaction.response.send_message(embed=embed)
+
+    @discord.ui.button(label="Renomear", emoji="✏️", style=discord.ButtonStyle.primary, custom_id="staff_renomear")
     async def renomear(self, interaction: discord.Interaction, button: discord.ui.Button):
 
+        if not self.is_staff(interaction):
+            await interaction.response.send_message(
+                "❌ Apenas staff pode usar isso.",
+                ephemeral=True
+            )
+            return
+
         class ModalRenomear(discord.ui.Modal, title="Renomear Ticket"):
-            nome = discord.ui.TextInput(label="Novo nome")
+            nome = discord.ui.TextInput(label="Novo nome do ticket")
 
             async def on_submit(self2, interaction2: discord.Interaction):
                 await interaction.channel.edit(name=self2.nome.value)
-                await interaction2.response.send_message("✅ Renomeado!", ephemeral=True)
+                await interaction2.response.send_message("✅ Nome alterado.", ephemeral=True)
 
         await interaction.response.send_modal(ModalRenomear())
 
-    @discord.ui.button(label="Finalizar", style=discord.ButtonStyle.red, custom_id="staff_finalizar")
+    @discord.ui.button(label="Finalizar", emoji="🔒", style=discord.ButtonStyle.danger, custom_id="staff_finalizar")
     async def finalizar(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+        if not self.is_staff(interaction):
+            await interaction.response.send_message(
+                "❌ Apenas staff pode usar isso.",
+                ephemeral=True
+            )
+            return
+
+        await interaction.response.send_message("📁 Gerando transcript...", ephemeral=True)
 
         channel = interaction.channel
 
         mensagens = []
         async for msg in channel.history(limit=None, oldest_first=True):
             data = msg.created_at.strftime("%d/%m/%Y %H:%M")
-
             conteudo = msg.content if msg.content else "[sem texto]"
 
             if msg.attachments:
@@ -782,7 +835,7 @@ class ViewStaffTicket(discord.ui.View):
                 del tickets_abertos[user_id]
                 break
 
-        await interaction.response.send_message("🔒 Fechando ticket...")
+        await channel.send("🔒 Ticket encerrado.")
         await channel.delete()
 
 
@@ -790,17 +843,30 @@ class ViewStaffTicket(discord.ui.View):
 @bot.tree.command(name="ticket", description="Abrir painel de ticket")
 async def ticket(interaction: discord.Interaction):
 
+    await interaction.response.defer(ephemeral=True)
+
     embed = discord.Embed(
-        title="🎫 Sistema de Tickets",
-        description="Escolha uma categoria abaixo:",
-        color=discord.Color.blue()
+        title="🎫 Central de Atendimento",
+        description=(
+            "Selecione abaixo o tipo de atendimento que você precisa.\n\n"
+            "🛠️ **Suporte** - Problemas / ajuda\n"
+            "💰 **Compra** - Produtos / serviços\n"
+            "❓ **Dúvidas** - Perguntas gerais\n\n"
+            "📌 *Nossa equipe responderá o mais rápido possível.*"
+        ),
+        color=discord.Color.from_rgb(35, 39, 42)
     )
 
-    # 👇 resposta visível (editado)
-    await interaction.response.send_message(
+    embed.set_footer(text="Sistema de tickets • 66moscou")
+    
+    await interaction.channel.send(
         embed=embed,
-        view=ViewTicket(),
-        ephemeral=False
+        view=ViewTicket()
+    )
+
+    await interaction.followup.send(
+        "✅ Painel enviado.",
+        ephemeral=True
     )
 
 
