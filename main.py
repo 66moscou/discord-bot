@@ -3,6 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 import json
 import os
+import io
 
 # ===== CONFIG =====
 TOKEN = os.getenv("TOKEN")
@@ -11,6 +12,9 @@ ARQUIVO_PAINEL = "painel.json"
 CANAL_BOAS_VINDAS_ID = 1241248843220258888
 CANAL_SAÍDA_ID = 1490923862358098115
 ID_CATEGORIA_CALL= 1255722186333749322
+
+# ===== TICKETS =====
+tickets_abertos = {}
 
 # ===== CARGOS DE SETAGEM =====
 CARGO_SET1 = 1307723016649576548
@@ -115,6 +119,8 @@ async def on_ready():
     bot.add_view(PainelVerificacao())
     bot.add_view(ViewSetagem())
     bot.add_view(ViewCallBooster())
+    bot.add_view(ViewTicket())
+    bot.add_view(ViewStaffTicket())
     
     # 👇 INICIA O STATUS DINÂMICO
     if not atualizar_status.is_running():
@@ -621,6 +627,145 @@ class ViewSetagem(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
         self.add_item(SelectCargos())
+
+
+# ================= SISTEMA DE TICKET =================
+
+async def criar_ticket(interaction, nome, categoria_id):
+    guild = interaction.guild
+    user = interaction.user
+
+    # 🚫 BLOQUEIO DE TICKET DUPLICADO
+    if user.id in tickets_abertos:
+        canal_existente = tickets_abertos[user.id]
+        await interaction.response.send_message(
+            f"❌ Você já possui um ticket aberto: {canal_existente.mention}",
+            ephemeral=True
+        )
+        return
+
+    staff_role = guild.get_role(CARGO_ATENDIMENTO)
+    categoria = guild.get_channel(categoria_id)
+
+    overwrites = {
+        guild.default_role: discord.PermissionOverwrite(view_channel=False),
+        user: discord.PermissionOverwrite(view_channel=True, send_messages=True),
+        staff_role: discord.PermissionOverwrite(view_channel=True, send_messages=True),
+    }
+
+    canal = await guild.create_text_channel(
+        name=f"{nome}-{user.name}",
+        category=categoria,
+        overwrites=overwrites
+    )
+
+    # ✅ SALVA QUE O USUÁRIO TEM TICKET ABERTO
+    tickets_abertos[user.id] = canal
+
+    await canal.send(
+        f"🎫 | Olá {user.mention}, bem-vindo ao **{nome}**!\n"
+        f"{staff_role.mention} irá te atender em breve.",
+        view=ViewStaffTicket()
+    )
+
+    await interaction.response.send_message(
+        f"✅ Ticket criado: {canal.mention}",
+        ephemeral=True
+    )
+
+
+# ===== BOTÕES DE TICKET =====
+class ViewTicket(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="Suporte", emoji="🛠️", style=discord.ButtonStyle.primary)
+    async def suporte(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await criar_ticket(interaction, "suporte", CATEGORIA_TICKET_SUPORTE)
+
+    @discord.ui.button(label="Compra", emoji="💰", style=discord.ButtonStyle.success)
+    async def compra(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await criar_ticket(interaction, "compra", CATEGORIA_TICKET_COMPRA)
+
+    @discord.ui.button(label="Dúvidas", emoji="❓", style=discord.ButtonStyle.secondary)
+    async def duvidas(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await criar_ticket(interaction, "duvidas", CATEGORIA_TICKET_DUVIDAS)
+
+
+# ===== PAINEL STAFF =====
+class ViewStaffTicket(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="Assumir", style=discord.ButtonStyle.green)
+    async def assumir(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_message(
+            f"👤 Ticket assumido por {interaction.user.mention}"
+        )
+
+    @discord.ui.button(label="Renomear", style=discord.ButtonStyle.primary)
+    async def renomear(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+        class ModalRenomear(discord.ui.Modal, title="Renomear Ticket"):
+            nome = discord.ui.TextInput(label="Novo nome")
+
+            async def on_submit(self2, interaction2: discord.Interaction):
+                await interaction.channel.edit(name=self2.nome.value)
+                await interaction2.response.send_message("✅ Renomeado!", ephemeral=True)
+
+        await interaction.response.send_modal(ModalRenomear())
+
+    @discord.ui.button(label="Finalizar", style=discord.ButtonStyle.red)
+async def finalizar(self, interaction: discord.Interaction, button: discord.ui.Button):
+
+    channel = interaction.channel
+
+    mensagens = []
+    async for msg in channel.history(limit=None, oldest_first=True):
+        data = msg.created_at.strftime("%d/%m/%Y %H:%M")
+        mensagens.append(f"[{data}] {msg.author}: {msg.content}")
+
+    transcript = "\n".join(mensagens)
+
+    arquivo = discord.File(
+        io.StringIO(transcript),
+        filename=f"transcript-{channel.name}.txt"
+    )
+
+    try:
+        await interaction.user.send(
+            f"📄 Transcript do ticket {channel.name}",
+            file=arquivo
+        )
+    except:
+        pass
+
+    # 🔓 LIBERA O USUÁRIO PARA ABRIR NOVO TICKET
+    for user_id, canal in list(tickets_abertos.items()):
+        if canal.id == channel.id:
+            del tickets_abertos[user_id]
+            break
+
+    await interaction.response.send_message("🔒 Fechando ticket...")
+    await channel.delete()
+
+
+# ===== COMANDO /TICKET =====
+@bot.tree.command(name="ticket", description="Abrir painel de ticket")
+async def ticket(interaction: discord.Interaction):
+
+    embed = discord.Embed(
+        title="🎫 Sistema de Tickets",
+        description="Escolha uma categoria abaixo:",
+        color=discord.Color.blue()
+    )
+
+    # 👇 resposta invisível (como você pediu)
+    await interaction.response.send_message(
+        embed=embed,
+        view=ViewTicket(),
+        ephemeral=True
+    )
 
 
 # ================= START =================
