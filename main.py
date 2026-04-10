@@ -678,8 +678,21 @@ async def criar_ticket(interaction, nome, categoria_id):
     # 👇 resto do código continua
     overwrites = {
         guild.default_role: discord.PermissionOverwrite(view_channel=False),
-        user: discord.PermissionOverwrite(view_channel=True, send_messages=True),
-        staff_role: discord.PermissionOverwrite(view_channel=True, send_messages=True),
+
+        user: discord.PermissionOverwrite(
+            view_channel=True,
+            send_messages=True
+        ),
+
+        staff_role: discord.PermissionOverwrite(
+            view_channel=True,
+            send_messages=True
+        ),
+
+        guild.me: discord.PermissionOverwrite(
+            view_channel=True,
+            send_messages=True
+        )
     }
 
     canal = await guild.create_text_channel(
