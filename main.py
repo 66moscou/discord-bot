@@ -719,9 +719,9 @@ async def criar_ticket(interaction, nome, categoria_id):
     embed.set_thumbnail(url=user.display_avatar.url)
     embed.set_footer(text=f"ID: {user.id}")
 
-    await canal.send(
+    msg = await canal.send(
         embed=embed,
-        view=ViewStaffTicket()
+        view=ViewStaffTicket(msg.id)
     )
 
     await interaction.response.send_message(
@@ -750,9 +750,10 @@ class ViewTicket(discord.ui.View):
 
 # ===== PAINEL STAFF =====
 class ViewStaffTicket(discord.ui.View):
-    def __init__(self):
+    def __init__(self, message_id=None):
         super().__init__(timeout=None)
         self.assumido_por = None
+        self.message_id = message_id
 
     def is_staff(self, interaction):
         return any(role.id == CARGO_ATENDIMENTO for role in interaction.user.roles)
@@ -776,22 +777,28 @@ class ViewStaffTicket(discord.ui.View):
 
         self.assumido_por = interaction.user
 
-        embed = discord.Embed(
-            description=f"👤 Ticket assumido por {interaction.user.mention}",
-            color=discord.Color.green()
-        )
+        # 👇 PEGA A MENSAGEM ORIGINAL
+        try:
+            msg = await interaction.channel.fetch_message(self.message_id)
+            embed = msg.embeds[0]
 
-        await interaction.response.send_message(embed=embed)
-
-    @discord.ui.button(label="Renomear", emoji="✏️", style=discord.ButtonStyle.primary, custom_id="staff_renomear")
-    async def renomear(self, interaction: discord.Interaction, button: discord.ui.Button):
-
-        if not self.is_staff(interaction):
-            await interaction.response.send_message(
-                "❌ Apenas staff pode usar isso.",
-                ephemeral=True
+            # 👇 ALTERA O TEXTO
+            nova_desc = embed.description.replace(
+                "🟡 Aguardando atendimento",
+                f"🟢 Atendido por {interaction.user.mention}"
             )
-            return
+
+            embed.description = nova_desc
+            embed.color = discord.Color.green()
+
+            await msg.edit(embed=embed)
+
+        except Exception as e:
+            print("Erro ao editar embed:", e)
+
+        await interaction.response.send_message(
+            f"👤 Ticket assumido por {interaction.user.mention}"
+        )
 
         class ModalRenomear(discord.ui.Modal, title="Renomear Ticket"):
             nome = discord.ui.TextInput(label="Novo nome do ticket")
